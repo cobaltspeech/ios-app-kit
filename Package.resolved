@@ -1,0 +1,16 @@
+{
+  "object": {
+    "pins": [
+      {
+        "package": "TOMLKit",
+        "repositoryURL": "git@github.com:LebJe/TOMLKit.git",
+        "state": {
+          "branch": null,
+          "revision": "de13888fe5cec1ab60dc7b02290245904dc1d4be",
+          "version": "0.3.2"
+        }
+      }
+    ]
+  },
+  "version": 1
+}
