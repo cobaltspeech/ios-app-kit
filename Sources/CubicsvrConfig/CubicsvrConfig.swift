@@ -18,29 +18,8 @@
 
 import Foundation
 import TOMLKit
-import PathConfiguration
 
 public struct CubicsvrConfig: Codable {
-    
-    public var pathConfiguration: PathConfiguration = PathConfiguration(resourceDirectory: "Cubicsvr",
-                                                                        licenseDirectory: "license",
-                                                                        modelsDirectory: "models") {
-        didSet {
-            guard let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-                return
-            }
-            
-            let resourcesURL = documentsPath.appendingPathComponent(pathConfiguration.resourceDirectory)
-            let licenseURL = resourcesURL.appendingPathComponent(pathConfiguration.licenseDirectory)
-            let modelsURL = resourcesURL.appendingPathComponent(pathConfiguration.modelsDirectory)
-            
-            for url in [resourcesURL, licenseURL, modelsURL] {
-                if !PathConfiguration.directoryExists(path: url) {
-                    PathConfiguration.createDirectory(url)
-                }
-            }
-        }
-    }
     
     public var Version: Int = 5
     public var server: Server = Server()
@@ -127,8 +106,13 @@ public struct CubicsvrConfig: Codable {
         public var confidence: Confidence?
     }
     
-    public init(pathConfiguration: PathConfiguration) {
-        self.pathConfiguration = pathConfiguration
+    public init() {
+        self.server = Server()
+        self.server.grpc = GRPC(Address: ":9000", CertFile: nil, KeyFile: nil)
+        self.license = License(KeyFile: "", UsageLog: nil)
+        self.recognizer = Recognizer()
+        self.storage = Storage()
+        self.logging = Logging()
     }
 
     public mutating func addModel(id: String, name: String, path: String) {
@@ -151,13 +135,9 @@ public struct CubicsvrConfig: Codable {
         }
     }
     
-    public init?(tomlString: String, pathConfiguration: PathConfiguration?) {
+    public init?(tomlString: String) {
         do {
-            var config = try TOMLDecoder().decode(Self.self, from: tomlString)
-            if let pathConfiguration = pathConfiguration {
-                config.pathConfiguration = pathConfiguration
-            }
-            print(config)
+            let config = try TOMLDecoder().decode(Self.self, from: tomlString)
             self = config
         } catch {
             print(error)
@@ -167,25 +147,14 @@ public struct CubicsvrConfig: Codable {
     
     @discardableResult
     public func save(_ path: URL) -> String? {
-        guard let absolutePathsConfig = configWithAbsolutePaths() else {
-            return nil
-        }
-        
         do {
-            let tomlString = try absolutePathsConfig.tomlString()
-            
-            //tomlString = tomlString.replacingOccurrences(of: "[server.grpc]", with: "[server]\n[server.http]\n[server.grpc]")
-            //tomlString.append(contentsOf: "\n\n[logging]\n\n[recognizer]\n\n[storage]")
-            
             if FileManager.default.fileExists(atPath: path.path) {
                 try FileManager.default.removeItem(at: path)
             }
             
+            let tomlString = try tomlString()
             try tomlString.write(to: path, atomically: true, encoding: .utf8)
-            let relativeTomlString = try self.tomlString()
-            //relativeTomlString = relativeTomlString.replacingOccurrences(of: "[server.grpc]", with: "[server]\n[server.http]\n[server.grpc]")
-            //relativeTomlString.append(contentsOf: "\n\n[logging]\n\n[recognizer]\n\n[storage]")
-            return relativeTomlString
+            return tomlString
         } catch {
             print(error)
             return nil
@@ -198,30 +167,6 @@ private extension CubicsvrConfig {
     
     private func tomlString() throws -> String {
         return try TOMLEncoder().encode(self)
-    }
-    
-    private func configWithAbsolutePaths() -> CubicsvrConfig? {
-        guard let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            return nil
-        }
-        
-        let resourcesURL = documentsPath.appendingPathComponent(pathConfiguration.resourceDirectory)
-        let licenseURL = resourcesURL.appendingPathComponent(pathConfiguration.licenseDirectory)
-        let modelsURL = resourcesURL.appendingPathComponent(pathConfiguration.modelsDirectory)
-        
-        var result = self
-        
-        result.license.KeyFile = licenseURL.appendingPathComponent(result.license.KeyFile).path
-        
-        for i in 0..<result.models.count {
-            result.models[i].ModelConfigPath = modelsURL.appendingPathComponent(result.models[i].ModelConfigPath).path
-            
-            if let formatterConfigPath = result.models[i].FormatterConfigPath {
-                result.models[i].FormatterConfigPath = modelsURL.appendingPathComponent(formatterConfigPath).path
-            }
-        }
-        
-        return result
     }
     
 }
