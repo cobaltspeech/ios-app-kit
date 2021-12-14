@@ -18,29 +18,8 @@
 
 import Foundation
 import TOMLKit
-import PathConfiguration
 
 public struct DiathekesvrConfig: Codable {
-    
-    public var pathConfiguration: PathConfiguration = PathConfiguration(resourceDirectory: "Diathekesvr",
-                                                                        licenseDirectory: "license",
-                                                                        modelsDirectory: "models") {
-        didSet {
-            guard let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-                return
-            }
-            
-            let resourcesURL = documentsPath.appendingPathComponent(pathConfiguration.resourceDirectory)
-            let licenseURL = resourcesURL.appendingPathComponent(pathConfiguration.licenseDirectory)
-            let modelsURL = resourcesURL.appendingPathComponent(pathConfiguration.modelsDirectory)
-            
-            for url in [resourcesURL, licenseURL, modelsURL] {
-                if !PathConfiguration.directoryExists(path: url) {
-                    PathConfiguration.createDirectory(url)
-                }
-            }
-        }
-    }
     
     public var Version: Int = 3
     public var server: Server = Server()
@@ -51,15 +30,18 @@ public struct DiathekesvrConfig: Codable {
     public var storage: Storage?
     
     private enum CodingKeys : String, CodingKey {
-        case Version, server, logging, license, storage, models
+        case Version, server, logging, license, services, storage, models
     }
     
     public struct Server: Codable {
         public var grpc: GRPC
-        public var http: HTTP?
+        public var http: HTTP
+        public var webdemo: WebDemo
         
         public init() {
             self.grpc = GRPC()
+            self.http = HTTP()
+            self.webdemo = WebDemo(Enabled: false)
         }
     }
     
@@ -77,6 +59,15 @@ public struct DiathekesvrConfig: Codable {
         public var IdleTimeout: String?
         public var CertFile: String?
         public var KeyFile: String?
+        
+        public init() {
+            Address = ""
+            Enabled = false
+        }
+    }
+    
+    public struct WebDemo: Codable {
+        public var Enabled: Bool
     }
     
     public struct Services: Codable {
@@ -85,8 +76,8 @@ public struct DiathekesvrConfig: Codable {
         public var luna: Luna
         
         public init() {
-            self.cubic = Cubic(Enabled: true, Address: "localhost:9000", Insecure: nil, Encoding: nil)
-            self.luna = Luna(Enabled: false, Address: "localhost:9001", Insecure: nil, Encoding: nil)
+            self.cubic = Cubic(Enabled: false, Address: "127.0.0.1:9000", Insecure: nil, Encoding: nil)
+            self.luna = Luna(Enabled: false, Address: "127.0.0.1:9001", Insecure: nil, Encoding: nil)
         }
         
         public struct Cubic: Codable {
@@ -136,10 +127,16 @@ public struct DiathekesvrConfig: Codable {
     }
     
     public init() {
-    }
-    
-    public init(pathConfiguration: PathConfiguration) {
-        self.pathConfiguration = pathConfiguration
+        self.server = Server()
+        self.server.grpc = GRPC(Address: "", CertFile: nil, KeyFile: nil)
+        self.server.http = HTTP()
+        self.server.http.Enabled = false
+        self.server.webdemo = WebDemo(Enabled: false)
+        self.services = Services()
+        self.services.cubic.Enabled = false
+        self.services.luna.Enabled = false
+        self.logging = Logging()
+        self.license = License(KeyFile: "")
     }
     
     public mutating func addModel(id: String,
@@ -173,13 +170,9 @@ public struct DiathekesvrConfig: Codable {
         }
     }
     
-    public init?(tomlString: String, pathConfiguration: PathConfiguration?) {
+    public init?(tomlString: String) {
         do {
-            var config = try TOMLDecoder().decode(Self.self, from: tomlString)
-            if let pathConfiguration = pathConfiguration {
-                config.pathConfiguration = pathConfiguration
-            }
-            print(config)
+            let config = try TOMLDecoder().decode(Self.self, from: tomlString)
             self = config
         } catch {
             print(error)
@@ -189,21 +182,14 @@ public struct DiathekesvrConfig: Codable {
     
     @discardableResult
     public func save(_ path: URL) -> String? {
-        guard let absolutePathsConfig = configWithAbsolutePaths() else {
-            return nil
-        }
-        
         do {
-            let tomlString = try absolutePathsConfig.tomlString()
-            
             if FileManager.default.fileExists(atPath: path.path) {
                 try FileManager.default.removeItem(at: path)
             }
             
+            let tomlString = try tomlString()
             try tomlString.write(to: path, atomically: true, encoding: .utf8)
-            let relativeTomlString = try self.tomlString()
-
-            return relativeTomlString
+            return tomlString
         } catch {
             print(error)
             return nil
@@ -217,25 +203,5 @@ private extension DiathekesvrConfig {
     private func tomlString() throws -> String {
         return try TOMLEncoder().encode(self)
     }
-    
-    private func configWithAbsolutePaths() -> DiathekesvrConfig? {
-        guard let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
-            return nil
-        }
-        
-        let resourcesURL = documentsPath.appendingPathComponent(pathConfiguration.resourceDirectory)
-        let licenseURL = resourcesURL.appendingPathComponent(pathConfiguration.licenseDirectory)
-        let modelsURL = resourcesURL.appendingPathComponent(pathConfiguration.modelsDirectory)
-        
-        var result = self
-        
-        result.license.KeyFile = licenseURL.appendingPathComponent(result.license.KeyFile).path
-        
-        for i in 0..<result.models.count {
-            result.models[i].ModelConfig = modelsURL.appendingPathComponent(result.models[i].ModelConfig).path
-        }
-        
-        return result
-    }
-    
+
 }
