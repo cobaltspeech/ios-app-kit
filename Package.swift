@@ -16,7 +16,10 @@ let package = Package(
             targets: ["DiathekesvrConfig"]),
         .library(
             name: "CubicsvrConfig",
-            targets: ["CubicsvrConfig"])
+            targets: ["CubicsvrConfig"]),
+        .library(
+            name: "LunasvrConfig",
+            targets: ["LunasvrConfig"])
     ],
     dependencies: [
             .package(url: "git@github.com:LebJe/TOMLKit.git", .exact("0.3.2"))
@@ -31,6 +34,11 @@ let package = Package(
             ]),
         .target(
             name: "DiathekesvrConfig",
+            dependencies: [
+                .product(name: "TOMLKit", package: "TOMLKit"),
+            ]),
+        .target(
+            name: "LunasvrConfig",
             dependencies: [
                 .product(name: "TOMLKit", package: "TOMLKit"),
             ]),
